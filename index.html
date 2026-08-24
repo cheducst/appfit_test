@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meu Treino</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Meu treino</p>
+        <h1 id="pageTitle">Hoje</h1>
+      </div>
+      <button class="icon-button" id="quickAddButton" type="button" aria-label="Adicionar treino ou exercicio">
+        <span aria-hidden="true">+</span>
+      </button>
+    </header>
+
+    <main>
+      <section class="view is-active" id="todayView" aria-labelledby="todayTitle">
+        <div class="section-head">
+          <div>
+            <h2 id="todayTitle">Treino do dia</h2>
+            <p id="todaySubtitle" class="muted">Escolha o treino e marque as series conforme conclui.</p>
+          </div>
+          <select id="todayWorkoutSelect" class="select" aria-label="Selecionar treino do dia"></select>
+        </div>
+        <div id="weeklyHistory" class="chart-card"></div>
+        <div id="todayProgress" class="progress-card"></div>
+        <div id="todayExercises" class="stack"></div>
+      </section>
+
+      <section class="view" id="plansView" aria-labelledby="plansTitle">
+        <div class="section-head">
+          <div>
+            <h2 id="plansTitle">Treinos</h2>
+            <p class="muted">Organize por grupo, dia ou objetivo.</p>
+          </div>
+          <button class="button primary" id="newWorkoutButton" type="button">Novo treino</button>
+        </div>
+        <div id="workoutList" class="stack"></div>
+      </section>
+
+      <section class="view" id="historyView" aria-labelledby="historyTitle">
+        <div class="section-head">
+          <div>
+            <h2 id="historyTitle">Historico</h2>
+            <p class="muted">Sessoes finalizadas e carga total.</p>
+          </div>
+          <button class="button ghost" id="clearTodayButton" type="button">Limpar hoje</button>
+        </div>
+        <div id="historyStats" class="stats-grid"></div>
+        <div id="historyList" class="stack"></div>
+      </section>
+
+      <section class="view" id="progressView" aria-labelledby="progressTitle">
+        <div class="section-head">
+          <div>
+            <h2 id="progressTitle">Evolucao</h2>
+            <p class="muted">Acompanhe cargas e repeticoes por exercicio.</p>
+          </div>
+          <select id="progressExerciseSelect" class="select" aria-label="Selecionar exercicio"></select>
+        </div>
+        <div id="progressChart" class="chart-card"></div>
+        <div id="progressDetails" class="stack"></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Navegacao principal">
+      <button class="nav-item is-active" data-view="today" type="button">
+        <span aria-hidden="true">◷</span>
+        Hoje
+      </button>
+      <button class="nav-item" data-view="plans" type="button">
+        <span aria-hidden="true">▦</span>
+        Treinos
+      </button>
+      <button class="nav-item" data-view="history" type="button">
+        <span aria-hidden="true">≡</span>
+        Historico
+      </button>
+      <button class="nav-item" data-view="progress" type="button">
+        <span aria-hidden="true">↗</span>
+        Evolucao
+      </button>
+    </nav>
+  </div>
+
+  <dialog id="editorDialog" class="dialog">
+    <form method="dialog" id="editorForm">
+      <div class="dialog-head">
+        <h2 id="dialogTitle">Editar</h2>
+        <button class="icon-button small" type="button" id="closeDialogButton" aria-label="Fechar">x</button>
+      </div>
+      <div id="dialogBody" class="form-grid"></div>
+      <div class="dialog-actions">
+        <button class="button ghost" type="button" id="deleteButton">Excluir</button>
+        <button class="button" type="button" id="cancelButton">Cancelar</button>
+        <button class="button primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
