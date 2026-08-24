@@ -1,7 +1,7 @@
-const STORAGE_KEY = "personal-training-app-pdf-days-v2";
+const STORAGE_KEY = "personal-training-app-pdf-days-v3";
 
 const sampleState = {
-  selectedWorkoutId: "biceps-peito",
+  selectedWorkoutId: "costas-ombros",
   selectedProgressExercise: "",
   activeView: "today",
   workouts: [
@@ -258,6 +258,49 @@ let state = loadState();
 let editorMode = null;
 let editorContext = {};
 
+const exerciseImageMap = {
+  "mobilidade-core-costas-ombros": {
+    url: "https://loremflickr.com/800/520/core,exercise,gym/all?lock=300",
+    source: "Flickr"
+  },
+  "barra-fixa-pegada-aberta": {
+    url: "https://commons.wikimedia.org/wiki/Special:FilePath/Pull-ups_exercise_from_back.jpg?width=900",
+    source: "Wikimedia Commons"
+  },
+  "crucifixo-inverso-maquina": {
+    url: "https://loremflickr.com/800/520/rear,delt,fly,gym/all?lock=301",
+    source: "Flickr"
+  },
+  "face-pull": {
+    url: "https://loremflickr.com/800/520/face,pull,cable,gym/all?lock=302",
+    source: "Flickr"
+  },
+  "puxada-neutra-triangulo": {
+    url: "https://commons.wikimedia.org/wiki/Special:FilePath/PulldownMachineExercise.JPG?width=900",
+    source: "Wikimedia Commons"
+  },
+  "crucifixo-inverso-polia-alta": {
+    url: "https://loremflickr.com/800/520/cable,rear,delt,gym/all?lock=303",
+    source: "Flickr"
+  },
+  "puxada-aberta-barra-reta": {
+    url: "https://commons.wikimedia.org/wiki/Special:FilePath/Back_Pull_down.jpg?width=900",
+    source: "Wikimedia Commons"
+  },
+  "pullover-anilha": {
+    url: "https://commons.wikimedia.org/wiki/Special:FilePath/Barbell_front_raise_pullover_1.svg?width=900",
+    source: "Wikimedia Commons"
+  },
+  "aducao-quadril-maquina": {
+    url: "https://loremflickr.com/800/520/hip,adduction,machine,gym/all?lock=304",
+    source: "Flickr"
+  },
+  "mesa-flexora": {
+    url: "https://commons.wikimedia.org/wiki/Special:FilePath/LyingLegCurlMachineExercise.JPG?width=900",
+    source: "Wikimedia Commons"
+  }
+};
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
@@ -327,6 +370,35 @@ function loadLabel(load) {
   return /\d/.test(value) && !/kg/i.test(value) ? `${value} kg` : value;
 }
 
+function imageForExercise(exercise) {
+  if (exercise.imageUrl) {
+    return {
+      url: exercise.imageUrl,
+      source: "Foto editada"
+    };
+  }
+  if (exerciseImageMap[exercise.id]) return exerciseImageMap[exercise.id];
+  const keywords = exercise.name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ",")
+    .replace(/^,|,$/g, "");
+  return {
+    url: `https://loremflickr.com/800/520/${keywords},gym,exercise/all?lock=${hashString(exercise.id)}`,
+    source: "Flickr"
+  };
+}
+
+function hashString(value) {
+  return String(value).split("").reduce((hash, char) => hash + char.charCodeAt(0), 500);
+}
+
+function exerciseWeightSummary(exercise) {
+  const labels = Array.from(new Set(exercise.sets.map((set) => loadLabel(set.load))));
+  return labels.length === 1 ? labels[0] : labels.join(" / ");
+}
+
 function render() {
   saveState();
   renderNavigation();
@@ -381,14 +453,22 @@ function renderToday() {
 
 function renderExerciseCard(workout, exercise) {
   const doneCount = exercise.sets.filter((set) => set.done).length;
+  const image = imageForExercise(exercise);
+  const weightSummary = exerciseWeightSummary(exercise);
   return `
     <article class="exercise-card">
+      <div class="exercise-media">
+        <img src="${escapeAttr(image.url)}" alt="${escapeAttr(exercise.name)}" loading="lazy" onerror="this.closest('.exercise-media').classList.add('is-fallback'); this.remove();">
+        <span>${escapeHtml(exercise.name)}</span>
+        <small>${escapeHtml(image.source)}</small>
+      </div>
       <div class="exercise-head">
         <div>
           <h3>${escapeHtml(exercise.name)}</h3>
           <p class="muted">${escapeHtml(exercise.notes || exercise.muscle || "Sem observacoes")}</p>
           <div class="meta-row">
             <span class="pill">${escapeHtml(exercise.muscle || "Geral")}</span>
+            <span class="pill weight-pill">Carga: ${escapeHtml(weightSummary)}</span>
             <span class="pill">${doneCount}/${exercise.sets.length} concluidas</span>
           </div>
         </div>
@@ -591,6 +671,9 @@ function openExerciseEditor(workoutId, exerciseId) {
     <label class="label">Observacoes
       <textarea class="textarea" name="notes">${escapeHtml(exercise?.notes || "")}</textarea>
     </label>
+    <label class="label">URL da foto
+      <input class="input" name="imageUrl" inputmode="url" value="${escapeAttr(exercise?.imageUrl || "")}">
+    </label>
     <div class="stack" id="setEditorList">
       ${sets.map((set, index) => renderSetEditor(set, index)).join("")}
     </div>
@@ -646,6 +729,7 @@ function submitEditor(event) {
       name: clean(data.get("name")) || "Novo exercicio",
       muscle: clean(data.get("muscle")),
       notes: clean(data.get("notes")),
+      imageUrl: clean(data.get("imageUrl")),
       sets: sets.length ? sets : [{ reps: 10, load: 0, done: false }]
     };
     if (existing) Object.assign(existing, payload);
