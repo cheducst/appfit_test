@@ -11,7 +11,7 @@
     <header class="topbar">
       <div>
         <p class="eyebrow">Meu treino</p>
-        <h1 id="pageTitle">Hoje</h1>
+        <h1 id="pageTitle">Treinos</h1>
       </div>
       <button class="icon-button" id="quickAddButton" type="button" aria-label="Adicionar treino ou exercicio">
         <span aria-hidden="true">+</span>
@@ -19,7 +19,7 @@
     </header>
 
     <main>
-      <section class="view is-active" id="todayView" aria-labelledby="todayTitle">
+      <section class="view" id="todayView" aria-labelledby="todayTitle">
         <div class="section-head">
           <div>
             <h2 id="todayTitle">Treino do dia</h2>
@@ -27,20 +27,20 @@
           </div>
           <select id="todayWorkoutSelect" class="select" aria-label="Selecionar treino do dia"></select>
         </div>
-        <div id="weeklyHistory" class="chart-card"></div>
         <div id="todayProgress" class="progress-card"></div>
         <div id="todayExercises" class="stack"></div>
       </section>
 
-      <section class="view" id="plansView" aria-labelledby="plansTitle">
+      <section class="view is-active" id="plansView" aria-labelledby="plansTitle">
         <div class="section-head">
           <div>
             <h2 id="plansTitle">Treinos</h2>
-            <p class="muted">Organize por grupo, dia ou objetivo.</p>
+            <p class="muted">Toque em um treino para comecar o dia de hoje.</p>
           </div>
           <button class="button primary" id="newWorkoutButton" type="button">Novo treino</button>
         </div>
-        <div id="workoutList" class="stack"></div>
+        <div id="weeklyHistory" class="chart-card"></div>
+        <div id="workoutList" class="workout-grid"></div>
       </section>
 
       <section class="view" id="historyView" aria-labelledby="historyTitle">
@@ -66,16 +66,48 @@
         <div id="progressChart" class="chart-card"></div>
         <div id="progressDetails" class="stack"></div>
       </section>
+
+      <section class="view" id="profileView" aria-labelledby="profileTitle">
+        <div class="section-head">
+          <div>
+            <h2 id="profileTitle">Perfil</h2>
+            <p class="muted">Seus dados ficam salvos apenas neste dispositivo.</p>
+          </div>
+        </div>
+        <div class="card profile-card">
+          <div class="form-grid">
+            <label class="label">Nick
+              <input class="input" id="profileNick" type="text" placeholder="Como te chamam na academia">
+            </label>
+            <div class="form-row">
+              <label class="label">Peso (kg)
+                <input class="input" id="profileWeight" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0">
+              </label>
+              <label class="label">Altura (cm)
+                <input class="input" id="profileHeight" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0">
+              </label>
+            </div>
+            <div class="form-row">
+              <label class="label">Idade
+                <input class="input" id="profileAge" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
+              </label>
+              <label class="label">Matricula
+                <input class="input" id="profileRegistration" type="text" placeholder="Numero de matricula">
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <nav class="bottom-nav" aria-label="Navegacao principal">
-      <button class="nav-item is-active" data-view="today" type="button">
-        <span aria-hidden="true">◷</span>
-        Hoje
-      </button>
-      <button class="nav-item" data-view="plans" type="button">
+      <button class="nav-item is-active" data-view="plans" type="button">
         <span aria-hidden="true">▦</span>
         Treinos
+      </button>
+      <button class="nav-item" data-view="today" type="button">
+        <span aria-hidden="true">◷</span>
+        Hoje
       </button>
       <button class="nav-item" data-view="history" type="button">
         <span aria-hidden="true">≡</span>
@@ -85,7 +117,27 @@
         <span aria-hidden="true">↗</span>
         Evolucao
       </button>
+      <button class="nav-item" data-view="profile" type="button">
+        <span aria-hidden="true">◍</span>
+        Perfil
+      </button>
     </nav>
+  </div>
+
+  <div id="restTimer" class="rest-timer" hidden>
+    <div class="rest-timer-bar" id="restTimerBar"></div>
+    <div class="rest-timer-row">
+      <div class="rest-timer-info">
+        <p class="rest-timer-label" id="restTimerLabel">Descanso</p>
+        <p class="rest-timer-time" id="restTimerTime">00:00</p>
+      </div>
+      <div class="rest-timer-controls">
+        <button type="button" class="icon-button small" id="restTimerMinus" aria-label="Menos 15 segundos">-15</button>
+        <button type="button" class="icon-button small" id="restTimerToggle" aria-label="Pausar cronometro">⏸</button>
+        <button type="button" class="icon-button small" id="restTimerPlus" aria-label="Mais 15 segundos">+15</button>
+        <button type="button" class="icon-button small" id="restTimerClose" aria-label="Fechar cronometro">×</button>
+      </div>
+    </div>
   </div>
 
   <dialog id="editorDialog" class="dialog">
@@ -98,10 +150,15 @@
       <div class="dialog-actions">
         <button class="button ghost" type="button" id="deleteButton">Excluir</button>
         <button class="button" type="button" id="cancelButton">Cancelar</button>
-        <button class="button primary" type="submit">Salvar</button>
+        <button class="button primary" type="button" id="saveEditorButton">Salvar</button>
       </div>
     </form>
   </dialog>
+
+  <div id="imageLightbox" class="image-lightbox" hidden role="dialog" aria-modal="true" aria-label="Foto ampliada">
+    <button class="image-lightbox-close" type="button" id="imageLightboxClose" aria-label="Fechar">×</button>
+    <img id="imageLightboxImg" src="" alt="">
+  </div>
 
   <script src="app.js"></script>
 </body>
