@@ -869,7 +869,9 @@ function renderHistory() {
         <div class="history-head-meta">
           <span class="history-duration">${session.durationMs ? formatElapsed(session.durationMs) : "--"}</span>
           <span class="muted">${(session.totalVolume / 1000).toFixed(1)}t</span>
-          <span class="history-chevron ${isExpanded ? "is-open" : ""}" aria-hidden="true">⌄</span>
+          <button type="button" class="history-chevron ${isExpanded ? "is-open" : ""}" data-action="toggle-history" data-session-id="${session.id}" aria-label="${isExpanded ? "Recolher detalhes da sessao" : "Expandir detalhes da sessao"}">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
         </div>
       </div>
       ${isExpanded ? `

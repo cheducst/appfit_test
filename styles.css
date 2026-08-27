@@ -386,11 +386,17 @@ h3 {
   cursor: pointer;
 }
 
+.history-head.is-clickable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
 .history-head-meta {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 6px;
   flex: 0 0 auto;
 }
 
@@ -401,12 +407,37 @@ h3 {
 }
 
 .history-chevron {
-  font-size: 1.1rem;
-  color: var(--muted);
-  transition: transform .18s ease;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--text);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  margin-top: 2px;
+  cursor: pointer;
+  transition: transform .18s ease, background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.history-chevron:hover,
+.history-chevron:focus-visible {
+  border-color: var(--primary);
+  color: var(--primary);
+  outline: none;
+}
+
+.history-head.is-clickable:hover .history-chevron,
+.history-head.is-clickable:focus-visible .history-chevron {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .history-chevron.is-open {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #0a0b09;
   transform: rotate(180deg);
 }
 
