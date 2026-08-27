@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Meu Treino</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,22 +16,59 @@
         <p class="eyebrow">Meu treino</p>
         <h1 id="pageTitle">Treinos</h1>
       </div>
-      <button class="icon-button" id="quickAddButton" type="button" aria-label="Adicionar treino ou exercicio">
-        <span aria-hidden="true">+</span>
-      </button>
+      <div class="topbar-actions">
+        <span id="activeSessionBadge" class="active-session-badge" hidden role="button" tabindex="0" data-action="goto-active-session" aria-label="Ir para o treino ativo">
+          <span class="active-session-dot" aria-hidden="true"></span>
+          Treino ativo
+        </span>
+        <button class="icon-button" id="quickAddButton" type="button" aria-label="Adicionar treino ou exercicio">
+          <span aria-hidden="true">+</span>
+        </button>
+      </div>
     </header>
 
     <main>
       <section class="view" id="todayView" aria-labelledby="todayTitle">
-        <div class="section-head">
-          <div>
-            <h2 id="todayTitle">Treino do dia</h2>
-            <p id="todaySubtitle" class="muted">Escolha o treino e marque as series conforme conclui.</p>
+        <div id="todayDashboard"></div>
+      </section>
+
+      <section class="view" id="activityView" aria-labelledby="activityTitle">
+        <div id="activityEmpty" hidden>
+          <div class="section-head">
+            <div>
+              <h2 id="activityTitle">Atividade</h2>
+              <p class="muted">Nenhum treino em andamento.</p>
+            </div>
           </div>
-          <select id="todayWorkoutSelect" class="select" aria-label="Selecionar treino do dia"></select>
+          <p class="empty-state">Inicie um treino na aba Treinos ou Hoje para acompanhar aqui.</p>
         </div>
-        <div id="todayProgress" class="progress-card"></div>
-        <div id="todayExercises" class="stack"></div>
+        <div id="todayTracker" hidden>
+          <div class="section-head">
+            <div>
+              <h2 id="todaySubtitle2">Treino em andamento</h2>
+              <p id="todaySubtitle" class="muted">Marque as series conforme conclui.</p>
+            </div>
+          </div>
+          <div class="today-sticky-header">
+            <div id="todayProgress" class="progress-card"></div>
+            <div id="restTimer" class="rest-timer" hidden>
+              <div class="rest-timer-bar" id="restTimerBar"></div>
+              <div class="rest-timer-row">
+                <div class="rest-timer-info">
+                  <p class="rest-timer-label" id="restTimerLabel">Descanso</p>
+                  <p class="rest-timer-time" id="restTimerTime">00:00</p>
+                </div>
+                <div class="rest-timer-controls">
+                  <button type="button" class="icon-button small" id="restTimerMinus" aria-label="Menos 15 segundos">-15</button>
+                  <button type="button" class="icon-button small" id="restTimerToggle" aria-label="Pausar cronometro">⏸</button>
+                  <button type="button" class="icon-button small" id="restTimerPlus" aria-label="Mais 15 segundos">+15</button>
+                  <button type="button" class="icon-button small" id="restTimerClose" aria-label="Fechar cronometro">×</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="todayExercises" class="stack"></div>
+        </div>
       </section>
 
       <section class="view is-active" id="plansView" aria-labelledby="plansTitle">
@@ -43,28 +83,15 @@
         <div id="workoutList" class="workout-grid"></div>
       </section>
 
-      <section class="view" id="historyView" aria-labelledby="historyTitle">
-        <div class="section-head">
-          <div>
-            <h2 id="historyTitle">Historico</h2>
-            <p class="muted">Sessoes finalizadas e carga total.</p>
-          </div>
-          <button class="button ghost" id="clearTodayButton" type="button">Limpar hoje</button>
-        </div>
-        <div id="historyStats" class="stats-grid"></div>
-        <div id="historyList" class="stack"></div>
-      </section>
-
       <section class="view" id="progressView" aria-labelledby="progressTitle">
         <div class="section-head">
           <div>
             <h2 id="progressTitle">Evolucao</h2>
-            <p class="muted">Acompanhe cargas e repeticoes por exercicio.</p>
+            <p class="muted">Toque num exercicio para ver o progresso.</p>
           </div>
-          <select id="progressExerciseSelect" class="select" aria-label="Selecionar exercicio"></select>
         </div>
-        <div id="progressChart" class="chart-card"></div>
-        <div id="progressDetails" class="stack"></div>
+        <div id="progressExerciseGrid" class="progress-exercise-grid"></div>
+        <div id="progressSelected"></div>
       </section>
 
       <section class="view" id="profileView" aria-labelledby="profileTitle">
@@ -74,7 +101,23 @@
             <p class="muted">Seus dados ficam salvos apenas neste dispositivo.</p>
           </div>
         </div>
+
+        <div class="profile-identity-card">
+          <div class="profile-avatar" id="profileAvatar">?</div>
+          <div class="profile-identity-info">
+            <h3 id="profileDisplayName">--</h3>
+            <p class="muted" id="profileDisplayRegistration">--</p>
+            <div class="profile-badges">
+              <span class="pill weight-pill" id="profileLevelBadge"></span>
+              <span class="pill" id="profileGoalBadge"></span>
+            </div>
+          </div>
+        </div>
+
+        <div id="profileStats" class="stats-grid"></div>
+
         <div class="card profile-card">
+          <p class="dashboard-section-label">Informacoes pessoais</p>
           <div class="form-grid">
             <label class="label">Nick
               <input class="input" id="profileNick" type="text" placeholder="Como te chamam na academia">
@@ -97,6 +140,57 @@
             </div>
           </div>
         </div>
+
+        <div class="card profile-card">
+          <p class="dashboard-section-label">Configuracoes de treino</p>
+          <div class="form-grid">
+            <div class="form-row">
+              <label class="label">Objetivo
+                <select class="select" id="profileGoal">
+                  ${GOAL_OPTIONS.map((goal) => `<option value="${escapeAttr(goal)}">${escapeHtml(goal)}</option>`).join("")}
+                </select>
+              </label>
+              <label class="label">Nivel
+                <select class="select" id="profileLevel">
+                  ${LEVEL_OPTIONS.map((level) => `<option value="${escapeAttr(level)}">${escapeHtml(level)}</option>`).join("")}
+                </select>
+              </label>
+            </div>
+            <label class="label">Frequencia semanal (dias/sem)
+              <input class="input" id="profileWeeklyFrequency" type="number" inputmode="numeric" min="0" max="7" step="1" placeholder="0">
+            </label>
+          </div>
+        </div>
+
+        <div class="card profile-card" id="profileImcCard"></div>
+
+        <div class="card profile-card">
+          <div class="section-head" style="margin-bottom:10px;">
+            <div>
+              <p class="dashboard-section-label" style="margin:0;">Categorias de treino</p>
+              <p class="muted" style="margin:2px 0 0;">Usadas para colorir e classificar exercicios.</p>
+            </div>
+            <button class="button ghost" type="button" id="newCategoryButton">+ Nova</button>
+          </div>
+          <div id="profileCategoryList" class="stack"></div>
+        </div>
+
+        <div class="card profile-card">
+          <p class="dashboard-section-label">Treinos cadastrados</p>
+          <div id="profileWorkoutFrequency" class="stack"></div>
+        </div>
+
+        <div class="card profile-card">
+          <div class="section-head" style="margin-bottom:10px;">
+            <div>
+              <p class="dashboard-section-label" style="margin:0;">Historico de treinos</p>
+            </div>
+            <button class="button ghost" id="clearTodayButton" type="button">Limpar hoje</button>
+          </div>
+          <div id="historyStats" class="stats-grid"></div>
+          <div id="historyFilterBar" class="filter-bar"></div>
+          <div id="historyList" class="stack"></div>
+        </div>
       </section>
     </main>
 
@@ -109,9 +203,11 @@
         <span aria-hidden="true">◷</span>
         Hoje
       </button>
-      <button class="nav-item" data-view="history" type="button">
-        <span aria-hidden="true">≡</span>
-        Historico
+      <button class="nav-item nav-item-center" data-view="activity" type="button" id="activityNavButton">
+        <span class="nav-item-center-circle" aria-hidden="true">
+          <span class="nav-item-center-icon">▶</span>
+        </span>
+        Atividade
       </button>
       <button class="nav-item" data-view="progress" type="button">
         <span aria-hidden="true">↗</span>
@@ -122,22 +218,6 @@
         Perfil
       </button>
     </nav>
-  </div>
-
-  <div id="restTimer" class="rest-timer" hidden>
-    <div class="rest-timer-bar" id="restTimerBar"></div>
-    <div class="rest-timer-row">
-      <div class="rest-timer-info">
-        <p class="rest-timer-label" id="restTimerLabel">Descanso</p>
-        <p class="rest-timer-time" id="restTimerTime">00:00</p>
-      </div>
-      <div class="rest-timer-controls">
-        <button type="button" class="icon-button small" id="restTimerMinus" aria-label="Menos 15 segundos">-15</button>
-        <button type="button" class="icon-button small" id="restTimerToggle" aria-label="Pausar cronometro">⏸</button>
-        <button type="button" class="icon-button small" id="restTimerPlus" aria-label="Mais 15 segundos">+15</button>
-        <button type="button" class="icon-button small" id="restTimerClose" aria-label="Fechar cronometro">×</button>
-      </div>
-    </div>
   </div>
 
   <dialog id="editorDialog" class="dialog">
@@ -158,6 +238,17 @@
   <div id="imageLightbox" class="image-lightbox" hidden role="dialog" aria-modal="true" aria-label="Foto ampliada">
     <button class="image-lightbox-close" type="button" id="imageLightboxClose" aria-label="Fechar">×</button>
     <img id="imageLightboxImg" src="" alt="">
+  </div>
+
+  <div id="confirmOverlay" class="confirm-overlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="confirm-card">
+      <h3 id="confirmTitle">Tem certeza?</h3>
+      <p id="confirmMessage" class="muted">Essa acao nao pode ser desfeita.</p>
+      <div class="confirm-actions">
+        <button class="button" type="button" id="confirmCancelBtn">Continuar</button>
+        <button class="button danger" type="button" id="confirmOkBtn">Confirmar</button>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
