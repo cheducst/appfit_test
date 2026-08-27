@@ -765,13 +765,16 @@ h3 {
 }
 
 .link-button {
+  display: inline-flex;
+  align-items: center;
   background: none;
   border: none;
   color: var(--primary);
   font-weight: 700;
-  font-size: .78rem;
-  min-height: auto;
-  padding: 4px 2px;
+  font-size: .82rem;
+  min-height: 44px;
+  padding: 10px 8px;
+  touch-action: manipulation;
 }
 
 .button,
@@ -1780,6 +1783,28 @@ h3 {
 .profile-card {
   padding: 16px;
   margin-bottom: 14px;
+}
+
+.profile-toggle-row {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.profile-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: .84rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.profile-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--primary);
 }
 
 .profile-identity-card {

@@ -146,19 +146,37 @@
           <div class="form-grid">
             <div class="form-row">
               <label class="label">Objetivo
-                <select class="select" id="profileGoal">
-                  ${GOAL_OPTIONS.map((goal) => `<option value="${escapeAttr(goal)}">${escapeHtml(goal)}</option>`).join("")}
-                </select>
+                <select class="select" id="profileGoal"></select>
               </label>
               <label class="label">Nivel
-                <select class="select" id="profileLevel">
-                  ${LEVEL_OPTIONS.map((level) => `<option value="${escapeAttr(level)}">${escapeHtml(level)}</option>`).join("")}
-                </select>
+                <select class="select" id="profileLevel"></select>
               </label>
             </div>
-            <label class="label">Frequencia semanal (dias/sem)
-              <input class="input" id="profileWeeklyFrequency" type="number" inputmode="numeric" min="0" max="7" step="1" placeholder="0">
+            <div class="form-row">
+              <label class="label">Frequencia semanal (dias/sem)
+                <input class="input" id="profileWeeklyFrequency" type="number" inputmode="numeric" min="0" max="7" step="1" placeholder="0">
+              </label>
+              <label class="label">Descanso padrao (segundos)
+                <input class="input" id="profileDefaultRest" type="number" inputmode="numeric" min="0" step="5" placeholder="90">
+              </label>
+            </div>
+            <label class="label">Unidade de carga
+              <select class="select" id="profileWeightUnit"></select>
             </label>
+            <div class="profile-toggle-row">
+              <label class="profile-toggle">
+                <input type="checkbox" id="profileRestSound">
+                Som no fim do descanso
+              </label>
+              <label class="profile-toggle">
+                <input type="checkbox" id="profileRestVibration">
+                Vibrar no fim do descanso
+              </label>
+              <label class="profile-toggle">
+                <input type="checkbox" id="profileRestNotifications">
+                Notificacao push no fim do descanso
+              </label>
+            </div>
           </div>
         </div>
 

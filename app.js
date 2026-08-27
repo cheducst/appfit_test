@@ -262,7 +262,12 @@ const sampleState = {
     registration: "",
     goal: "Hipertrofia",
     level: "Intermediario",
-    weeklyFrequency: "4"
+    weeklyFrequency: "4",
+    defaultRestSeconds: "90",
+    weightUnit: "kg",
+    restSound: true,
+    restVibration: true,
+    restNotifications: true
   },
   exerciseCategories: [
     { id: "cat-peito", name: "Peito", color: "#ff6b6b" },
@@ -281,6 +286,10 @@ const sampleState = {
 const MUSCLE_GROUP_OPTIONS = ["Peito", "Costas", "Ombros", "Biceps", "Triceps", "Pernas", "Gluteos", "Core", "Cardio"];
 const GOAL_OPTIONS = ["Hipertrofia", "Emagrecimento", "Forca", "Resistencia", "Saude geral"];
 const LEVEL_OPTIONS = ["Iniciante", "Intermediario", "Avancado"];
+const WEIGHT_UNIT_OPTIONS = [
+  { value: "kg", label: "Quilogramas (kg)" },
+  { value: "lb", label: "Libras (lb)" }
+];
 
 let state = loadState();
 let editorMode = null;
@@ -366,6 +375,11 @@ const elements = {
   profileGoal: $("#profileGoal"),
   profileLevel: $("#profileLevel"),
   profileWeeklyFrequency: $("#profileWeeklyFrequency"),
+  profileDefaultRest: $("#profileDefaultRest"),
+  profileWeightUnit: $("#profileWeightUnit"),
+  profileRestSound: $("#profileRestSound"),
+  profileRestVibration: $("#profileRestVibration"),
+  profileRestNotifications: $("#profileRestNotifications"),
   restTimer: $("#restTimer"),
   restTimerBar: $("#restTimerBar"),
   restTimerLabel: $("#restTimerLabel"),
@@ -695,7 +709,7 @@ function renderExerciseCard(workout, exercise) {
   const doneCount = exercise.sets.filter((set) => set.done).length;
   const isComplete = exercise.sets.length > 0 && doneCount === exercise.sets.length;
   const image = imageForExercise(exercise);
-  const restSeconds = parseIntervalSeconds(exercise.notes) || 60;
+  const restSeconds = parseIntervalSeconds(exercise.notes) || Number(state.profile?.defaultRestSeconds) || 60;
   const groupColor = colorForGroup(exercise.muscle);
   const anterior = anteriorForExercise(exercise.name);
   return `
@@ -857,7 +871,7 @@ function renderHistory() {
     const workout = state.workouts.find((item) => item.id === session.workoutId);
     return `
     <article class="history-card">
-      <div class="history-head is-clickable" data-action="toggle-history" data-session-id="${session.id}" role="button" tabindex="0" aria-expanded="${isExpanded}">
+      <div class="history-head is-clickable" data-action="toggle-history" data-session-id="${session.id}">
         <div>
           <div class="history-head-tag-row">
             <span class="pill weight-pill">${escapeHtml(workout?.day || "Treino")}</span>
@@ -1031,9 +1045,23 @@ function renderProfile() {
   elements.profileHeight.value = state.profile?.height ?? "";
   elements.profileAge.value = state.profile?.age ?? "";
   elements.profileRegistration.value = state.profile?.registration || "";
-  if (elements.profileGoal) elements.profileGoal.value = state.profile?.goal || GOAL_OPTIONS[0];
-  if (elements.profileLevel) elements.profileLevel.value = state.profile?.level || LEVEL_OPTIONS[1];
+  if (elements.profileGoal) {
+    elements.profileGoal.innerHTML = GOAL_OPTIONS.map((goal) => `<option value="${escapeAttr(goal)}">${escapeHtml(goal)}</option>`).join("");
+    elements.profileGoal.value = state.profile?.goal || GOAL_OPTIONS[0];
+  }
+  if (elements.profileLevel) {
+    elements.profileLevel.innerHTML = LEVEL_OPTIONS.map((level) => `<option value="${escapeAttr(level)}">${escapeHtml(level)}</option>`).join("");
+    elements.profileLevel.value = state.profile?.level || LEVEL_OPTIONS[1];
+  }
+  if (elements.profileWeightUnit) {
+    elements.profileWeightUnit.innerHTML = WEIGHT_UNIT_OPTIONS.map((unit) => `<option value="${escapeAttr(unit.value)}">${escapeHtml(unit.label)}</option>`).join("");
+    elements.profileWeightUnit.value = state.profile?.weightUnit || "kg";
+  }
   if (elements.profileWeeklyFrequency) elements.profileWeeklyFrequency.value = state.profile?.weeklyFrequency ?? "";
+  if (elements.profileDefaultRest) elements.profileDefaultRest.value = state.profile?.defaultRestSeconds ?? "90";
+  if (elements.profileRestSound) elements.profileRestSound.checked = state.profile?.restSound !== false;
+  if (elements.profileRestVibration) elements.profileRestVibration.checked = state.profile?.restVibration !== false;
+  if (elements.profileRestNotifications) elements.profileRestNotifications.checked = state.profile?.restNotifications !== false;
 
   const nick = state.profile?.nick || "";
   const avatar = document.getElementById("profileAvatar");
@@ -1106,7 +1134,12 @@ function updateProfile() {
     registration: elements.profileRegistration.value,
     goal: elements.profileGoal ? elements.profileGoal.value : state.profile?.goal,
     level: elements.profileLevel ? elements.profileLevel.value : state.profile?.level,
-    weeklyFrequency: elements.profileWeeklyFrequency ? elements.profileWeeklyFrequency.value : state.profile?.weeklyFrequency
+    weeklyFrequency: elements.profileWeeklyFrequency ? elements.profileWeeklyFrequency.value : state.profile?.weeklyFrequency,
+    defaultRestSeconds: elements.profileDefaultRest ? elements.profileDefaultRest.value : state.profile?.defaultRestSeconds,
+    weightUnit: elements.profileWeightUnit ? elements.profileWeightUnit.value : state.profile?.weightUnit,
+    restSound: elements.profileRestSound ? elements.profileRestSound.checked : state.profile?.restSound,
+    restVibration: elements.profileRestVibration ? elements.profileRestVibration.checked : state.profile?.restVibration,
+    restNotifications: elements.profileRestNotifications ? elements.profileRestNotifications.checked : state.profile?.restNotifications
   };
   saveState();
   renderProfile();
@@ -1145,6 +1178,7 @@ function startRestTimer(seconds, label) {
 
 function ensureNotificationPermission() {
   if (!("Notification" in window)) return;
+  if (state.profile?.restNotifications === false) return;
   if (Notification.permission === "default") {
     try {
       Notification.requestPermission();
@@ -1206,9 +1240,9 @@ function closeRestTimer() {
 }
 
 function alertRestFinished() {
-  playBeep();
-  if (navigator.vibrate) navigator.vibrate([220, 90, 220, 90, 220]);
-  if ("Notification" in window && Notification.permission === "granted") {
+  if (state.profile?.restSound !== false) playBeep();
+  if (state.profile?.restVibration !== false && navigator.vibrate) navigator.vibrate([220, 90, 220, 90, 220]);
+  if (state.profile?.restNotifications !== false && "Notification" in window && Notification.permission === "granted") {
     try {
       new Notification("Descanso concluido!", {
         body: `Hora de continuar: ${timerState.label}`,
@@ -1712,7 +1746,7 @@ function handleAction(event) {
       set.done = !set.done;
       if (set.done && exercise) {
         if (!state.sessionStartedAt) state.sessionStartedAt = Date.now();
-        startRestTimer(parseIntervalSeconds(exercise.notes) || 60, exercise.name);
+        startRestTimer(parseIntervalSeconds(exercise.notes) || Number(state.profile?.defaultRestSeconds) || 60, exercise.name);
       }
     }
     render();
@@ -1863,7 +1897,7 @@ elements.editorForm.addEventListener("keydown", (event) => {
   }
 });
 
-[elements.profileNick, elements.profileWeight, elements.profileHeight, elements.profileAge, elements.profileRegistration, elements.profileGoal, elements.profileLevel, elements.profileWeeklyFrequency].forEach((input) => {
+[elements.profileNick, elements.profileWeight, elements.profileHeight, elements.profileAge, elements.profileRegistration, elements.profileGoal, elements.profileLevel, elements.profileWeeklyFrequency, elements.profileDefaultRest, elements.profileWeightUnit, elements.profileRestSound, elements.profileRestVibration, elements.profileRestNotifications].forEach((input) => {
   if (!input) return;
   input.addEventListener("input", updateProfile);
   input.addEventListener("change", updateProfile);
