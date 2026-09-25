@@ -617,24 +617,22 @@ function renderActivity() {
     return;
   }
 
-  const sets = workout.exercises.flatMap((exercise) => exercise.sets);
-  const done = sets.filter((set) => set.done).length;
-  const percent = sets.length ? Math.round((done / sets.length) * 100) : 0;
+  const doneExercises = workout.exercises.filter((exercise) => exercise.sets.length && exercise.sets.every((set) => set.done)).length;
+  const totalExercises = workout.exercises.length;
+  const percent = totalExercises ? Math.round((doneExercises / totalExercises) * 100) : 0;
   elements.todayProgress.innerHTML = `
     <div class="exercise-head">
       <div>
-        <h3><span class="tracker-dot" aria-hidden="true"></span>${escapeHtml(workout.name)}</h3>
-        <p class="muted">${escapeHtml(workout.group || workout.day || "Treino")}</p>
+        <h3>${escapeHtml(workout.name)}</h3>
       </div>
       <div class="today-progress-meta">
-        <span class="today-progress-percent">${done}/${sets.length}<small>series</small></span>
+        <span class="today-progress-percent">${doneExercises}/${totalExercises}<small>exercicios</small></span>
         ${state.sessionStartedAt ? `<span class="pill" id="todayElapsedTime">${formatElapsed(Date.now() - state.sessionStartedAt)}</span>` : ""}
       </div>
     </div>
     <div class="bar-track" role="progressbar" aria-label="Progresso do treino" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100">
       <div class="bar-fill" style="width:${percent}%"></div>
     </div>
-    <p class="today-progress-label muted">${percent >= 100 ? "Treino concluido! 🎉" : `${percent}% concluido`}</p>
     <div class="tracker-actions">
       <button class="button ghost tracker-action-abandon" type="button" data-action="abandon-session">Abandonar</button>
       <button class="button primary tracker-action-finish" type="button" data-action="finish-session">Finalizar <span aria-hidden="true">→</span></button>
@@ -708,9 +706,25 @@ function formatElapsed(ms) {
 function renderExerciseCard(workout, exercise) {
   const doneCount = exercise.sets.filter((set) => set.done).length;
   const isComplete = exercise.sets.length > 0 && doneCount === exercise.sets.length;
+  const groupColor = colorForGroup(exercise.muscle);
+  const isCollapsed = !expandedExerciseIds.has(exercise.id);
+
+  if (isCollapsed) {
+    return `
+      <article class="exercise-card exercise-card-collapsed ${isComplete ? "is-complete" : ""}" style="border-left:4px solid ${isComplete ? "var(--primary)" : groupColor.dot};">
+        <button class="exercise-collapsed-row" type="button" data-action="toggle-exercise-collapse" data-exercise-id="${exercise.id}" aria-label="Expandir ${escapeAttr(exercise.name)}" aria-expanded="false">
+          <span class="exercise-collapsed-title">${escapeHtml(exercise.name)}</span>
+          <span class="exercise-collapsed-meta">
+            ${isComplete ? `<span class="exercise-collapsed-check" aria-hidden="true">✓</span>` : `<span class="muted">${doneCount}/${exercise.sets.length}</span>`}
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </span>
+        </button>
+      </article>
+    `;
+  }
+
   const image = imageForExercise(exercise);
   const restSeconds = parseIntervalSeconds(exercise.notes) || Number(state.profile?.defaultRestSeconds) || 60;
-  const groupColor = colorForGroup(exercise.muscle);
   const anterior = anteriorForExercise(exercise.name);
   return `
     <article class="exercise-card ${isComplete ? "is-complete" : ""}" style="border-left:4px solid ${isComplete ? "var(--primary)" : groupColor.dot};">
@@ -730,7 +744,12 @@ function renderExerciseCard(workout, exercise) {
         </div>
         <div class="exercise-head-right">
           ${anterior !== null ? `<div class="exercise-anterior"><span class="muted">Anterior</span><strong>${anterior} kg</strong></div>` : ""}
-          <button class="icon-button small" type="button" data-action="edit-exercise" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" aria-label="Editar exercicio">...</button>
+          <div class="exercise-head-buttons">
+            <button class="icon-button small" type="button" data-action="edit-exercise" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" aria-label="Editar exercicio">...</button>
+            <button class="history-chevron is-open" type="button" data-action="toggle-exercise-collapse" data-exercise-id="${exercise.id}" aria-label="Encolher series" aria-expanded="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+          </div>
         </div>
       </div>
       <div class="set-table">
@@ -828,6 +847,7 @@ function moveExercise(workoutId, exerciseId, direction) {
 }
 
 const expandedHistoryIds = new Set();
+const expandedExerciseIds = new Set();
 let historyFilterDay = "todos";
 
 function renderHistory() {
@@ -1742,17 +1762,25 @@ function handleAction(event) {
     const exercise = workout?.exercises.find((item) => item.id === exerciseId);
     const setIndex = Number(target.dataset.setIndex);
     const set = exercise?.sets[setIndex];
+    let justCompletedExercise = false;
     if (set) {
       set.done = !set.done;
       if (set.done && exercise) {
         if (!state.sessionStartedAt) state.sessionStartedAt = Date.now();
         startRestTimer(parseIntervalSeconds(exercise.notes) || Number(state.profile?.defaultRestSeconds) || 60, exercise.name);
+        if (exercise.sets.every((item) => item.done)) justCompletedExercise = true;
       }
     }
     render();
     if (set?.done) {
       const row = document.querySelector(`.set-table-row[data-workout-id="${workoutId}"][data-exercise-id="${exerciseId}"][data-set-index="${setIndex}"]`);
       row?.classList.add("just-completed");
+    }
+    if (justCompletedExercise) {
+      setTimeout(() => {
+        expandedExerciseIds.delete(exercise.id);
+        render();
+      }, 650);
     }
   }
   if (action === "start-rest") {
@@ -1776,6 +1804,13 @@ function handleAction(event) {
     if (expandedHistoryIds.has(sessionId)) expandedHistoryIds.delete(sessionId);
     else expandedHistoryIds.add(sessionId);
     renderHistory();
+    return;
+  }
+  if (action === "toggle-exercise-collapse") {
+    const targetExerciseId = target.dataset.exerciseId;
+    if (expandedExerciseIds.has(targetExerciseId)) expandedExerciseIds.delete(targetExerciseId);
+    else expandedExerciseIds.add(targetExerciseId);
+    renderActivity();
     return;
   }
   if (action === "filter-history-day") {
