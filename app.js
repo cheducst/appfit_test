@@ -728,6 +728,10 @@ function renderExerciseCard(workout, exercise) {
   const anterior = anteriorForExercise(exercise.name);
   return `
     <article class="exercise-card ${isComplete ? "is-complete" : ""}" style="border-left:4px solid ${isComplete ? "var(--primary)" : groupColor.dot};">
+      <button class="exercise-collapse-top" type="button" data-action="toggle-exercise-collapse" data-exercise-id="${exercise.id}" aria-label="Encolher ${escapeAttr(exercise.name)}" aria-expanded="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"></polyline></svg>
+        <span class="exercise-collapse-top-label">Recolher</span>
+      </button>
       <div class="exercise-media is-clickable" data-action="expand-image" data-image-url="${escapeAttr(image.url)}" data-image-alt="${escapeAttr(exercise.name)}" role="button" tabindex="0" aria-label="Ampliar foto de ${escapeAttr(exercise.name)}">
         <img src="${escapeAttr(image.url)}" alt="${escapeAttr(exercise.name)}" loading="lazy" onerror="this.closest('.exercise-media').classList.add('is-fallback'); this.remove();">
         <span class="exercise-media-fallback-label">${escapeHtml(exercise.name)}</span>
@@ -746,15 +750,15 @@ function renderExerciseCard(workout, exercise) {
           ${anterior !== null ? `<div class="exercise-anterior"><span class="muted">Anterior</span><strong>${anterior} kg</strong></div>` : ""}
           <div class="exercise-head-buttons">
             <button class="icon-button small" type="button" data-action="edit-exercise" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" aria-label="Editar exercicio">...</button>
-            <button class="history-chevron is-open" type="button" data-action="toggle-exercise-collapse" data-exercise-id="${exercise.id}" aria-label="Encolher series" aria-expanded="true">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </button>
           </div>
         </div>
       </div>
       <div class="set-table">
         <div class="set-table-row set-table-head-row">
-          <span>#</span><span>Reps</span><span>Carga</span><span>OK</span>
+          <span>#</span><span>Reps</span><span>Carga</span>
+          ${isComplete
+            ? `<span>OK</span>`
+            : `<button type="button" class="set-table-complete-all" data-action="complete-all-sets" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" aria-label="Concluir todas as series de ${escapeAttr(exercise.name)}">Tudo</button>`}
         </div>
         ${exercise.sets.map((set, setIndex) => `
           <div class="set-table-row ${set.done ? "is-done" : ""}" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" data-set-index="${setIndex}">
@@ -1783,6 +1787,21 @@ function handleAction(event) {
       }, 650);
     }
   }
+  if (action === "complete-all-sets") {
+    const workout = state.workouts.find((item) => item.id === workoutId);
+    const exercise = workout?.exercises.find((item) => item.id === exerciseId);
+    if (exercise && exercise.sets.length && !exercise.sets.every((item) => item.done)) {
+      if (!state.sessionStartedAt) state.sessionStartedAt = Date.now();
+      exercise.sets.forEach((item) => { item.done = true; });
+      startRestTimer(parseIntervalSeconds(exercise.notes) || Number(state.profile?.defaultRestSeconds) || 60, exercise.name);
+      render();
+      setTimeout(() => {
+        expandedExerciseIds.delete(exercise.id);
+        render();
+      }, 650);
+    }
+    return;
+  }
   if (action === "start-rest") {
     startRestTimer(Number(target.dataset.seconds) || 60, target.dataset.label || "Descanso");
   }
@@ -1950,3 +1969,4 @@ setInterval(() => {
 }, 1000);
 
 render();
+
