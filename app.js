@@ -1405,16 +1405,22 @@ function showConfirm(title, message, confirmLabel, onConfirm) {
   okBtn.textContent = confirmLabel;
   overlay.hidden = false;
 
+  // Atribuicao direta (onclick) garante um unico handler por vez: sem
+  // listeners acumulados caso o dialogo seja aberto mais de uma vez.
   const cleanup = () => {
     overlay.hidden = true;
-    okBtn.removeEventListener("click", handleOk);
-    cancelBtn.removeEventListener("click", handleCancel);
+    okBtn.onclick = null;
+    cancelBtn.onclick = null;
   };
-  const handleOk = () => { cleanup(); onConfirm(); };
-  const handleCancel = () => { cleanup(); };
-
-  okBtn.addEventListener("click", handleOk);
-  cancelBtn.addEventListener("click", handleCancel);
+  okBtn.onclick = (event) => {
+    event.stopPropagation();
+    cleanup();
+    onConfirm();
+  };
+  cancelBtn.onclick = (event) => {
+    event.stopPropagation();
+    cleanup();
+  };
 }
 
 function openCategoryEditor(categoryId) {
@@ -1740,16 +1746,50 @@ function clearToday() {
   render();
 }
 
+function exitSessionWithoutSaving() {
+  const workout = selectedWorkout();
+  workout?.exercises.forEach((exercise) => exercise.sets.forEach((set) => { set.done = false; }));
+  expandedExerciseIds.clear();
+  closeRestTimer();
+  state.sessionStartedAt = null;
+  state.isTracking = false;
+  state.activeView = "plans";
+  render();
+  window.scrollTo(0, 0);
+}
+
 function abandonSession() {
   showConfirm(
     "Abandonar treino?",
     "O progresso desta sessao nao sera salvo.",
     "Abandonar",
+    exitSessionWithoutSaving
+  );
+}
+
+function requestFinishSession() {
+  const workout = selectedWorkout();
+  if (!workout) return;
+  const doneSets = workout.exercises.reduce((sum, exercise) => sum + exercise.sets.filter((set) => set.done).length, 0);
+  if (!doneSets) {
+    showConfirm(
+      "Nenhuma serie concluida",
+      "Sem series marcadas nao ha o que salvar. Sair do treino mesmo assim?",
+      "Sair sem salvar",
+      exitSessionWithoutSaving
+    );
+    return;
+  }
+  const doneExercises = workout.exercises.filter((exercise) => exercise.sets.length && exercise.sets.every((set) => set.done)).length;
+  showConfirm(
+    "Concluir treino?",
+    `${doneExercises} de ${workout.exercises.length} exercicios concluidos. O treino sera salvo no historico.`,
+    "Concluir",
     () => {
-      clearToday();
-      state.isTracking = false;
-      state.activeView = "today";
-      render();
+      expandedExerciseIds.clear();
+      closeRestTimer();
+      finishSession();
+      window.scrollTo(0, 0);
     }
   );
 }
@@ -1816,7 +1856,7 @@ function handleAction(event) {
     refreshWorkoutEditorExerciseList();
     return;
   }
-  if (action === "finish-session") finishSession();
+  if (action === "finish-session") requestFinishSession();
   if (action === "abandon-session") abandonSession();
   if (action === "toggle-history") {
     const sessionId = target.dataset.sessionId;
@@ -1963,7 +2003,7 @@ $("#restTimerPlus").addEventListener("click", () => adjustRestTimer(15));
 $("#restTimerClose").addEventListener("click", closeRestTimer);
 
 setInterval(() => {
-  if (!state.sessionStartedAt || state.activeView !== "today") return;
+  if (!state.sessionStartedAt || state.activeView !== "activity") return;
   const label = document.getElementById("todayElapsedTime");
   if (label) label.textContent = formatElapsed(Date.now() - state.sessionStartedAt);
 }, 1000);
