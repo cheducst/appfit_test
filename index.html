@@ -77,7 +77,11 @@
             <h2 id="plansTitle">Treinos</h2>
             <p class="muted">Toque em um treino para comecar o dia de hoje.</p>
           </div>
-          <button class="button primary" id="newWorkoutButton" type="button">Novo treino</button>
+          <div id="programStripWrap"><div id="programStrip"></div></div>
+          <div class="section-head-actions">
+            <button class="button primary" id="newWorkoutButton" type="button">Novo treino</button>
+            <button class="button" id="editAllWorkoutsButton" type="button" data-action="edit-all-workouts">Editar todos</button>
+          </div>
         </div>
         <div id="weeklyHistory" class="chart-card"></div>
         <div id="workoutList" class="workout-grid"></div>

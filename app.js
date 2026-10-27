@@ -389,13 +389,34 @@ const elements = {
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return structuredClone(sampleState);
+  if (!saved) return ensurePrograms(structuredClone(sampleState));
   try {
     const parsed = JSON.parse(saved);
-    return { ...structuredClone(sampleState), ...parsed };
+    return ensurePrograms({ ...structuredClone(sampleState), ...parsed });
   } catch {
-    return structuredClone(sampleState);
+    return ensurePrograms(structuredClone(sampleState));
   }
+}
+
+// Grupos de treino ("programs"): cada treino pertence a um grupo; so o grupo ativo aparece em Treinos/Hoje.
+function ensurePrograms(target) {
+  if (!Array.isArray(target.workouts)) target.workouts = [];
+  if (!Array.isArray(target.programs) || !target.programs.length) {
+    target.programs = [{ id: "program-default", name: "Treino atual" }];
+  }
+  if (!target.programs.some((program) => program.id === target.activeProgramId)) target.activeProgramId = target.programs[0].id;
+  target.workouts.forEach((workout) => {
+    if (!target.programs.some((program) => program.id === workout.programId)) workout.programId = target.activeProgramId;
+  });
+  return target;
+}
+
+function activeProgram() {
+  return state.programs.find((program) => program.id === state.activeProgramId) || state.programs[0];
+}
+
+function activeWorkouts() {
+  return state.workouts.filter((workout) => workout.programId === state.activeProgramId);
 }
 
 function saveState() {
@@ -411,7 +432,7 @@ function uid(prefix) {
 }
 
 function selectedWorkout() {
-  return state.workouts.find((workout) => workout.id === state.selectedWorkoutId) || state.workouts[0];
+  return state.workouts.find((workout) => workout.id === state.selectedWorkoutId) || activeWorkouts()[0];
 }
 
 function formatDate(isoDate) {
@@ -422,8 +443,15 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function isFreeTextLoad(value) {
+  // Texto livre (ex.: "A definir conforme RIR 3", "Carga maxima"): sobra alguma letra alem da unidade.
+  return /[a-zA-ZÀ-ÿ]/.test(String(value ?? "").replace(/kgs?|lbs?/gi, ""));
+}
+
 function numericLoad(load) {
-  const match = String(load ?? "").replace(",", ".").match(/\d+(\.\d+)?/);
+  const text = String(load ?? "").replace(",", ".").trim();
+  if (isFreeTextLoad(text)) return 0;
+  const match = text.match(/\d+(\.\d+)?/);
   return match ? Number(match[0]) : 0;
 }
 
@@ -431,7 +459,9 @@ function loadLabel(load) {
   const value = String(load ?? "").trim();
   if (!value) return "";
   if (/^0(\.0+)?\s*kg?$/i.test(value)) return "";
-  return /\d/.test(value) && !/kg/i.test(value) ? `${value} kg` : value;
+  // Texto livre: mostra como foi escrito (e limpa um " kg" que versoes antigas anexavam ao final).
+  if (isFreeTextLoad(value)) return value.replace(/\s+kg$/i, "");
+  return /\d/.test(value) && !/kg|lb/i.test(value) ? `${value} kg` : value;
 }
 
 function imageForExercise(exercise) {
@@ -536,12 +566,13 @@ function lifetimeStats() {
 }
 
 function suggestedWorkout() {
-  if (!state.workouts.length) return null;
+  const pool = activeWorkouts();
+  if (!pool.length) return null;
   const lastTrainedAt = {};
   state.history.forEach((session, index) => {
     if (!(session.workoutId in lastTrainedAt)) lastTrainedAt[session.workoutId] = index;
   });
-  const sorted = [...state.workouts].sort((a, b) => {
+  const sorted = [...pool].sort((a, b) => {
     const aIndex = lastTrainedAt[a.id] ?? Infinity;
     const bIndex = lastTrainedAt[b.id] ?? Infinity;
     return bIndex - aIndex;
@@ -572,6 +603,7 @@ function render() {
   renderWeeklyHistory();
   renderToday();
   renderActivity();
+  renderPrograms();
   renderPlans();
   renderHistory();
   renderProgress();
@@ -649,8 +681,8 @@ function renderTodayDashboard() {
   const lastSession = state.history[0];
   const nick = state.profile?.nick || "";
 
-  if (!state.workouts.length) {
-    elements.todayDashboard.innerHTML = "<p class=\"empty-state\">Crie um treino para comecar.</p>";
+  if (!activeWorkouts().length) {
+    elements.todayDashboard.innerHTML = "<p class=\"empty-state\">Este grupo ainda nao tem treinos. Crie um na aba Treinos para comecar.</p>";
     return;
   }
 
@@ -676,9 +708,9 @@ function renderTodayDashboard() {
       </div>
     </article>
     ` : ""}
-    <p class="dashboard-section-label">Todos os treinos</p>
+    <p class="dashboard-section-label">Treinos · ${escapeHtml(activeProgram().name)}</p>
     <div class="dashboard-workout-grid">
-      ${state.workouts.map((workout) => `
+      ${activeWorkouts().map((workout) => `
         <button class="dashboard-workout-chip" type="button" data-action="start-workout" data-workout-id="${workout.id}">
           <span class="dashboard-workout-day">${escapeHtml(workout.day || "Treino")}</span>
           <strong>${escapeHtml(workout.name)}</strong>
@@ -763,7 +795,10 @@ function renderExerciseCard(workout, exercise) {
         ${exercise.sets.map((set, setIndex) => `
           <div class="set-table-row ${set.done ? "is-done" : ""}" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" data-set-index="${setIndex}">
             <span class="set-table-index">${setIndex + 1}</span>
-            <input class="set-table-input" type="number" inputmode="numeric" min="0" value="${set.reps || 0}" data-live-field="reps" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" data-set-index="${setIndex}" aria-label="Repeticoes da serie ${setIndex + 1}">
+            <div class="set-table-reps">
+              <input class="set-table-input" type="number" inputmode="numeric" min="0" value="${set.reps || 0}" data-live-field="reps" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" data-set-index="${setIndex}" aria-label="Repeticoes da serie ${setIndex + 1}">
+              ${set.note ? `<span class="set-table-note">${escapeHtml(set.note)}</span>` : ""}
+            </div>
             <input class="set-table-input" type="text" inputmode="decimal" value="${escapeAttr(loadLabel(set.load))}" data-live-field="load" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" data-set-index="${setIndex}" aria-label="Carga da serie ${setIndex + 1}">
             <button class="set-table-check" type="button" data-action="toggle-set" data-workout-id="${workout.id}" data-exercise-id="${exercise.id}" data-set-index="${setIndex}" aria-label="Concluir serie ${setIndex + 1}">${set.done ? "✓" : ""}</button>
           </div>
@@ -805,13 +840,40 @@ function renderWeeklyHistory() {
   `;
 }
 
+function renderPrograms() {
+  const strip = document.getElementById("programStrip");
+  if (!strip) return;
+  const current = activeProgram();
+  strip.innerHTML = `
+    <div class="program-strip-head">
+      <p class="dashboard-section-label">Grupos de treino</p>
+      <button class="link-button" type="button" data-action="edit-program" data-program-id="${current.id}">Editar grupo</button>
+    </div>
+    <div class="program-strip" role="list">
+      ${state.programs.map((program) => {
+        const workouts = state.workouts.filter((workout) => workout.programId === program.id);
+        const preview = workouts.slice(0, 3).map((workout) => workout.name).join(" · ");
+        return `
+          <button class="program-card ${program.id === current.id ? "is-active" : ""}" type="button" role="listitem" data-action="select-program" data-program-id="${program.id}" aria-pressed="${program.id === current.id}">
+            <strong>${escapeHtml(program.name)}</strong>
+            <span class="program-card-count">${workouts.length} treino${workouts.length === 1 ? "" : "s"}</span>
+            <span class="program-card-preview">${escapeHtml(preview || "Sem treinos ainda")}</span>
+          </button>
+        `;
+      }).join("")}
+      <button class="program-card program-card-new" type="button" data-action="new-program"><span aria-hidden="true">+</span> Novo grupo</button>
+    </div>
+  `;
+}
+
 function renderPlans() {
-  if (!state.workouts.length) {
-    elements.workoutList.innerHTML = "<p class=\"empty-state\">Nenhum treino cadastrado.</p>";
+  const workouts = activeWorkouts();
+  if (!workouts.length) {
+    elements.workoutList.innerHTML = "<p class=\"empty-state\">Este grupo ainda nao tem treinos. Toque em Novo treino.</p>";
     return;
   }
 
-  elements.workoutList.innerHTML = state.workouts.map((workout) => {
+  elements.workoutList.innerHTML = workouts.map((workout) => {
     const setCount = workout.exercises.reduce((total, exercise) => total + exercise.sets.length, 0);
     const groups = groupsForWorkout(workout);
     return `
@@ -961,28 +1023,58 @@ function buildAreaChartSvg(values) {
   `;
 }
 
-function renderProgress() {
-  const names = Array.from(new Set(state.history.flatMap((session) => session.exercises.filter((exercise) => exercise.sets.length).map((exercise) => exercise.name))));
+function normalizeExerciseName(name) {
+  return String(name ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
 
-  if (!names.length) {
+function sessionLoadFor(exercise) {
+  const stored = Number(exercise.bestLoad);
+  if (stored > 0) return stored;
+  const loads = (exercise.sets || []).map((set) => numericLoad(set.load));
+  return loads.length ? Math.max(...loads) : 0;
+}
+
+function sessionRepsFor(exercise) {
+  const stored = Number(exercise.totalReps);
+  if (stored > 0) return stored;
+  return (exercise.sets || []).reduce((sum, set) => sum + (Number(set.reps) || 0), 0);
+}
+
+function renderProgress() {
+  const sessions = (state.history || []).filter((session) => Array.isArray(session.exercises));
+  // Agrupa por nome normalizado (sem acento/caixa) para nao quebrar o historico por pequenas diferencas.
+  const nameByKey = new Map();
+  sessions.forEach((session) => session.exercises.forEach((exercise) => {
+    if (!Array.isArray(exercise.sets) || !exercise.sets.length) return;
+    const key = normalizeExerciseName(exercise.name);
+    if (key && !nameByKey.has(key)) nameByKey.set(key, exercise.name);
+  }));
+
+  if (!nameByKey.size) {
     elements.progressExerciseGrid.innerHTML = "";
     elements.progressSelected.innerHTML = "<p class=\"empty-state\">Finalize treinos para ver a evolucao.</p>";
     return;
   }
 
-  const selected = names.includes(state.selectedProgressExercise) ? state.selectedProgressExercise : names[0];
+  const requestedKey = normalizeExerciseName(state.selectedProgressExercise);
+  const selectedKey = nameByKey.has(requestedKey) ? requestedKey : nameByKey.keys().next().value;
+  const selected = nameByKey.get(selectedKey);
   state.selectedProgressExercise = selected;
 
-  elements.progressExerciseGrid.innerHTML = names.map((name) => {
-    let sourceExercise = null;
+  const findSource = (key) => {
     for (const workout of state.workouts) {
-      const found = workout.exercises.find((item) => item.name === name);
-      if (found) { sourceExercise = found; break; }
+      const found = workout.exercises.find((item) => normalizeExerciseName(item.name) === key);
+      if (found) return found;
     }
+    return null;
+  };
+
+  elements.progressExerciseGrid.innerHTML = Array.from(nameByKey.entries()).map(([key, name]) => {
+    const sourceExercise = findSource(key);
     const muscle = sourceExercise?.muscle || "";
     const image = sourceExercise ? imageForExercise(sourceExercise) : null;
     return `
-      <button class="progress-exercise-chip ${name === selected ? "is-active" : ""}" type="button" data-action="select-progress-exercise" data-name="${escapeAttr(name)}">
+      <button class="progress-exercise-chip ${key === selectedKey ? "is-active" : ""}" type="button" data-action="select-progress-exercise" data-name="${escapeAttr(name)}">
         ${image ? `<span class="progress-exercise-chip-media" style="background-image:url('${escapeAttr(image.url)}');"></span>` : ""}
         <span class="progress-exercise-chip-info">
           <strong>${escapeHtml(name)}</strong>
@@ -992,13 +1084,19 @@ function renderProgress() {
     `;
   }).join("");
 
-  const rows = state.history
+  const rows = sessions
     .slice()
     .reverse()
     .map((session) => {
-      const exercise = session.exercises.find((item) => item.name === selected);
+      const exercise = session.exercises.find((item) => normalizeExerciseName(item.name) === selectedKey && Array.isArray(item.sets) && item.sets.length);
       if (!exercise) return null;
-      return exercise.bestLoad > 0 ? { date: session.date, load: exercise.bestLoad, reps: exercise.totalReps, volume: exercise.volume, sets: exercise.sets } : null;
+      return {
+        date: session.date,
+        load: sessionLoadFor(exercise),
+        reps: sessionRepsFor(exercise),
+        volume: Number(exercise.volume) || 0,
+        sets: exercise.sets
+      };
     })
     .filter(Boolean);
 
@@ -1007,42 +1105,45 @@ function renderProgress() {
     return;
   }
 
-  const loads = rows.map((row) => row.load);
-  const record = Math.max(...loads);
-  const atual = loads[loads.length - 1];
-  const anteriorLoad = loads.length > 1 ? loads[loads.length - 2] : atual;
-  const percentChange = anteriorLoad ? Math.round(((atual - anteriorLoad) / anteriorLoad) * 1000) / 10 : 0;
-  let sourceExercise = null;
-  for (const workout of state.workouts) {
-    const found = workout.exercises.find((item) => item.name === selected);
-    if (found) { sourceExercise = found; break; }
-  }
+  // Evolucao de peso: usa a carga quando existe; sem nenhuma carga registrada, cai para repeticoes.
+  const hasLoad = rows.some((row) => row.load > 0);
+  const metricRows = hasLoad ? rows.filter((row) => row.load > 0) : rows;
+  const metric = (row) => (hasLoad ? row.load : row.reps);
+  const unit = hasLoad ? " kg" : " reps";
+  const values = metricRows.map(metric);
+  const record = Math.max(...values);
+  const atual = values[values.length - 1];
+  const anteriorValue = values.length > 1 ? values[values.length - 2] : atual;
+  const percentChange = anteriorValue ? Math.round(((atual - anteriorValue) / anteriorValue) * 1000) / 10 : 0;
+  const sourceExercise = findSource(selectedKey);
   const image = sourceExercise ? imageForExercise(sourceExercise) : null;
-  const maxVolume = Math.max(...rows.map((row) => row.volume), 1);
+  const barValue = (row) => (hasLoad ? row.volume : row.reps);
+  const maxBar = Math.max(...rows.map(barValue), 1);
 
   elements.progressSelected.innerHTML = `
     <div class="progress-selected-head">
       ${image ? `<img src="${escapeAttr(image.url)}" alt="${escapeAttr(selected)}" class="progress-selected-media" loading="lazy" onerror="this.remove();">` : ""}
       <div>
         <h3>${escapeHtml(selected)}</h3>
-        <p class="muted">${escapeHtml(sourceExercise?.muscle || "")}</p>
+        <p class="muted">${escapeHtml(sourceExercise?.muscle || "")} · ${rows.length} sess${rows.length === 1 ? "ao" : "oes"}</p>
       </div>
     </div>
+    ${hasLoad ? "" : `<p class="muted">Nenhuma carga foi informada nas sessoes deste exercicio. Digite a carga em cada serie durante o treino para acompanhar a evolucao de peso; por enquanto mostramos as repeticoes.</p>`}
     <div class="stats-grid progress-stats-grid">
-      <div class="stat"><span class="muted">Recorde</span><b class="stat-positive">${record} kg</b></div>
-      <div class="stat"><span class="muted">Atual</span><b>${atual} kg</b></div>
+      <div class="stat"><span class="muted">Recorde</span><b class="stat-positive">${record}${unit}</b></div>
+      <div class="stat"><span class="muted">Atual</span><b>${atual}${unit}</b></div>
       <div class="stat"><span class="muted">Vs anterior</span><b class="${percentChange >= 0 ? "stat-positive" : "stat-negative"}">${percentChange >= 0 ? "+" : ""}${percentChange}%</b></div>
     </div>
     <div class="chart-card">
-      <h3>Progressao de carga</h3>
-      ${buildAreaChartSvg(loads)}
+      <h3>${hasLoad ? "Progressao de carga" : "Progressao de repeticoes"}</h3>
+      ${buildAreaChartSvg(values)}
     </div>
     <div class="chart-card">
-      <h3>Volume por sessao</h3>
+      <h3>${hasLoad ? "Volume por sessao" : "Repeticoes por sessao"}</h3>
       <div class="volume-bars">
         ${rows.map((row) => `
           <div class="volume-bar-item">
-            <div class="volume-bar" style="height:${Math.max(6, Math.round((row.volume / maxVolume) * 72))}px;"></div>
+            <div class="volume-bar" style="height:${Math.max(6, Math.round((barValue(row) / maxBar) * 72))}px;"></div>
             <span class="muted">${formatDate(row.date)}</span>
           </div>
         `).join("")}
@@ -1056,7 +1157,8 @@ function renderProgress() {
             <h3>${formatDate(row.date)}</h3>
             <span class="pill">${row.reps}x</span>
           </div>
-          <p class="muted">${row.load} kg · ${Math.round(row.volume)} kg de volume</p>
+          <p class="muted">${row.load > 0 ? `${row.load} kg · ${Math.round(row.volume)} kg de volume` : "Sem carga registrada"}</p>
+          <p class="muted">${row.sets.map((set) => `${Number(set.reps) || 0}x ${escapeHtml(set.load || "sem carga")}`).join(" · ")}</p>
         </article>
       `).join("")}
     </div>
@@ -1602,14 +1704,547 @@ function renderSetEditor(set, index) {
         <input class="input" name="set-load-${index}" value="${escapeAttr(set.load || "0kg")}">
       </label>
       <button class="icon-button small" type="button" data-action="remove-set" aria-label="Remover serie">x</button>
+      <label class="label set-editor-note">Nota da serie (opcional, texto curto)
+        <input class="input" name="set-note-${index}" maxlength="60" placeholder="Ex.: RIR 3, ate a falha" value="${escapeAttr(set.note || "")}">
+      </label>
     </div>
   `;
 }
 
+// ---------- Editor em massa: todos os treinos em um unico texto ----------
+// Formato:  "# Treino | Dia | Grupo, Grupo"  seguido de uma linha por exercicio:
+//           "Exercicio | Musculo | 4x12 | Carga | Observacao"
+// Series diferentes entre si: "12@20kg; 10@25kg" no lugar de "4x12 | Carga".
+let bulkPendingConfirm = false;
+let bulkFormat = "text";
+
+const BULK_FORMAT_HELP = [
+  "# Nome do treino | Dia | Grupos (opcional)",
+  "Exercicio | Musculo | 4x12 | Carga | Observacao",
+  "",
+  "Exemplo:",
+  "# Peito e Triceps | Dia A | Peito, Triceps",
+  "Supino reto | Peito | 4x12 | 20kg | Intervalo: 60s.",
+  "Triceps corda | Triceps | 3x15 | 15kg",
+  "Crucifixo | Peito | 12@10kg; 10@12kg; 8@14kg",
+  "",
+  "Series com cargas diferentes: 12@10kg; 10@12kg",
+  "Nota curta na serie: 12@10kg ~ RIR 3; 10@12kg ~ ate a falha",
+  "Carga e observacao sao opcionais."
+].join("\n");
+
+const BULK_JSON_HELP = [
+  "[",
+  "  {",
+  '    "id": "peito-triceps",',
+  '    "name": "Peito e Triceps",',
+  '    "day": "Dia A",',
+  '    "groups": ["Peito", "Triceps"],',
+  '    "exercises": [',
+  "      {",
+  '        "name": "Supino reto",',
+  '        "muscle": "Peito",',
+  '        "notes": "Intervalo: 60s.",',
+  '        "sets": [',
+  '          { "reps": 12, "load": "20kg", "note": "RIR 3" },',
+  '          { "reps": 10, "load": "22kg" }',
+  "        ]",
+  "      }",
+  "    ]",
+  "  }",
+  "]",
+  "",
+  'Obrigatorios: "name" no treino e no exercicio; "reps" em cada serie.',
+  'Sem "id" o item e casado pelo nome ou criado como novo.'
+].join("\n");
+
+function bulkCell(value) {
+  return String(value ?? "").replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+}
+
+function workoutsToText(workouts) {
+  return workouts.map((workout) => {
+    const head = [`# ${bulkCell(workout.name)}`, bulkCell(workout.day), (workout.groups || []).map(bulkCell).join(", ")];
+    while (head.length > 1 && !head[head.length - 1]) head.pop();
+    const lines = [head.join(" | ")];
+    workout.exercises.forEach((exercise) => {
+      const sets = exercise.sets || [];
+      const first = sets[0];
+      const uniform = first && sets.every((set) => Number(set.reps) === Number(first.reps) && String(set.load ?? "") === String(first.load ?? "") && !set.note);
+      const cols = [bulkCell(exercise.name), bulkCell(exercise.muscle)];
+      if (!first) cols.push("");
+      else if (uniform) cols.push(`${sets.length}x${Number(first.reps) || 0}`, bulkCell(first.load));
+      else cols.push(sets.map((set) => `${Number(set.reps) || 0}@${bulkCell(set.load)}${set.note ? ` ~ ${bulkCell(set.note).replace(/[;~]/g, ",")}` : ""}`).join("; "));
+      const notes = bulkCell(exercise.notes);
+      if (notes) {
+        while (cols.length < 4) cols.push("");
+        cols.push(notes);
+      }
+      lines.push(cols.join(" | "));
+    });
+    return lines.join("\n");
+  }).join("\n\n");
+}
+
+function parseWorkoutsText(text) {
+  const errors = [];
+  const warnings = [];
+  const workouts = [];
+  const categories = state.exerciseCategories || [];
+  const findCategory = (name) => categories.find((item) => item.name.toLowerCase() === name.toLowerCase());
+  let current = null;
+
+  String(text || "").split(/\r?\n/).forEach((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line) return;
+    const lineNo = index + 1;
+
+    if (line.startsWith("#")) {
+      const parts = line.replace(/^#\s*/, "").split("|").map((part) => part.trim());
+      const name = parts[0];
+      if (!name) {
+        errors.push(`Linha ${lineNo}: treino sem nome.`);
+        current = null;
+        return;
+      }
+      if (workouts.some((item) => item.name.toLowerCase() === name.toLowerCase())) {
+        errors.push(`Linha ${lineNo}: o treino "${name}" aparece mais de uma vez.`);
+      }
+      const groups = [];
+      (parts[2] || "").split(",").map((item) => item.trim()).filter(Boolean).forEach((group) => {
+        const category = findCategory(group);
+        if (!category) warnings.push(`Linha ${lineNo}: grupo "${group}" nao existe nas categorias (ignorado).`);
+        else if (!groups.includes(category.name)) groups.push(category.name);
+      });
+      current = { name, day: parts[1] || "", groups, exercises: [] };
+      workouts.push(current);
+      return;
+    }
+
+    if (!current) {
+      errors.push(`Linha ${lineNo}: exercicio antes de um treino. Comece com "# Nome do treino".`);
+      return;
+    }
+
+    const [name, muscleRaw = "", setsSpec = "", load = "", notes = ""] = line.split("|").map((part) => part.trim());
+    if (!name) {
+      errors.push(`Linha ${lineNo}: exercicio sem nome.`);
+      return;
+    }
+    let muscle = muscleRaw;
+    if (muscle) {
+      const category = findCategory(muscle);
+      if (category) muscle = category.name;
+      else warnings.push(`Linha ${lineNo}: categoria "${muscle}" nao existe (mantida como texto).`);
+    }
+
+    let sets = null;
+    const uniform = setsSpec.match(/^(\d+)\s*[xX×]\s*(\d+)$/);
+    if (uniform) {
+      const count = Math.min(Number(uniform[1]), 20);
+      sets = Array.from({ length: count }, () => ({ reps: Number(uniform[2]), load: load || "0kg", done: false }));
+    } else if (setsSpec.includes("@")) {
+      sets = setsSpec.split(";").map((item) => item.trim()).filter(Boolean).map((item) => {
+        const match = item.match(/^(\d+)\s*@\s*([^~]*?)\s*(?:~\s*(.*))?$/);
+        if (!match) return null;
+        const note = (match[3] || "").trim();
+        return { reps: Number(match[1]), load: match[2].trim() || "0kg", ...(note ? { note } : {}), done: false };
+      });
+      if (sets.some((item) => !item)) sets = null;
+    }
+    if (!sets || !sets.length) {
+      warnings.push(`Linha ${lineNo}: series de "${name}" nao reconhecidas (usado 3x10). Use 4x12 ou 12@20kg; 10@25kg.`);
+      sets = Array.from({ length: 3 }, () => ({ reps: 10, load: load || "0kg", done: false }));
+    }
+    current.exercises.push({ name, muscle, notes, sets });
+  });
+
+  return { workouts, errors, warnings };
+}
+
+function workoutsToJson(workouts) {
+  const keepImage = (url) => (typeof url === "string" && url && !/^data:/i.test(url) ? { imageUrl: url } : {});
+  return JSON.stringify(workouts.map((workout) => ({
+    id: workout.id,
+    name: workout.name,
+    day: workout.day || "",
+    group: workout.group || "",
+    notes: workout.notes || "",
+    groups: workout.groups || [],
+    ...keepImage(workout.imageUrl),
+    exercises: workout.exercises.map((exercise) => ({
+      id: exercise.id,
+      name: exercise.name,
+      muscle: exercise.muscle || "",
+      notes: exercise.notes || "",
+      ...keepImage(exercise.imageUrl),
+      sets: (exercise.sets || []).map((set) => ({ reps: Number(set.reps) || 0, load: String(set.load ?? ""), ...(set.note ? { note: String(set.note) } : {}) }))
+    }))
+  })), null, 2);
+}
+
+function parseWorkoutsJson(text) {
+  const errors = [];
+  const warnings = [];
+  const workouts = [];
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    return { workouts, errors: [`JSON invalido: ${err.message}`], warnings };
+  }
+  const list = Array.isArray(data) ? data : (data && Array.isArray(data.workouts) ? data.workouts : null);
+  if (!list) {
+    return { workouts, errors: ['O JSON precisa ser uma lista de treinos (ou {"workouts": [...]}).'], warnings };
+  }
+  const categories = state.exerciseCategories || [];
+  const findCategory = (name) => categories.find((item) => item.name.toLowerCase() === String(name).toLowerCase());
+  const usedIds = new Set();
+
+  list.forEach((raw, i) => {
+    const label = `Treino ${i + 1}`;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      errors.push(`${label}: deve ser um objeto.`);
+      return;
+    }
+    const name = String(raw.name ?? "").trim();
+    if (!name) {
+      errors.push(`${label}: falta o campo "name".`);
+      return;
+    }
+    if (workouts.some((item) => item.name.toLowerCase() === name.toLowerCase())) errors.push(`${label}: o nome "${name}" aparece mais de uma vez.`);
+    const id = raw.id ? String(raw.id) : "";
+    if (id) {
+      if (usedIds.has(id)) errors.push(`${label} (${name}): id "${id}" repetido.`);
+      usedIds.add(id);
+    }
+    if (raw.exercises !== undefined && !Array.isArray(raw.exercises)) {
+      errors.push(`${label} (${name}): "exercises" deve ser uma lista.`);
+      return;
+    }
+    const groups = [];
+    (Array.isArray(raw.groups) ? raw.groups : []).forEach((group) => {
+      const category = findCategory(group);
+      if (!category) warnings.push(`${label} (${name}): grupo "${group}" nao existe nas categorias (ignorado).`);
+      else if (!groups.includes(category.name)) groups.push(category.name);
+    });
+    const workout = { id, name, day: String(raw.day ?? ""), groups, exercises: [] };
+    if (raw.group !== undefined) workout.group = String(raw.group);
+    if (raw.notes !== undefined) workout.notes = String(raw.notes);
+    if (typeof raw.imageUrl === "string" && raw.imageUrl) workout.imageUrl = raw.imageUrl;
+
+    (raw.exercises || []).forEach((rawExercise, j) => {
+      const exLabel = `${label} (${name}), exercicio ${j + 1}`;
+      if (!rawExercise || typeof rawExercise !== "object" || Array.isArray(rawExercise)) {
+        errors.push(`${exLabel}: deve ser um objeto.`);
+        return;
+      }
+      const exName = String(rawExercise.name ?? "").trim();
+      if (!exName) {
+        errors.push(`${exLabel}: falta o campo "name".`);
+        return;
+      }
+      let muscle = String(rawExercise.muscle ?? "").trim();
+      if (muscle) {
+        const category = findCategory(muscle);
+        if (category) muscle = category.name;
+        else warnings.push(`${exLabel} ("${exName}"): categoria "${muscle}" nao existe (mantida como texto).`);
+      }
+      let sets = [];
+      if (Array.isArray(rawExercise.sets) && rawExercise.sets.length) {
+        let bad = false;
+        sets = rawExercise.sets.map((set) => {
+          const reps = Number(set?.reps);
+          if (!set || typeof set !== "object" || !Number.isFinite(reps) || reps < 0) { bad = true; return null; }
+          const note = String(set.note ?? "").trim();
+          return { reps, load: String(set.load ?? "").trim() || "0kg", ...(note ? { note } : {}), done: false };
+        });
+        if (bad) {
+          errors.push(`${exLabel} ("${exName}"): cada serie precisa de {"reps": numero, "load": "20kg"}.`);
+          return;
+        }
+      } else {
+        warnings.push(`${exLabel} ("${exName}"): sem series (usado 3x10).`);
+        sets = Array.from({ length: 3 }, () => ({ reps: 10, load: "0kg", done: false }));
+      }
+      const exercise = {
+        id: rawExercise.id ? String(rawExercise.id) : "",
+        name: exName,
+        muscle,
+        notes: String(rawExercise.notes ?? "").trim(),
+        sets
+      };
+      if (typeof rawExercise.imageUrl === "string" && rawExercise.imageUrl) exercise.imageUrl = rawExercise.imageUrl;
+      workout.exercises.push(exercise);
+    });
+    workouts.push(workout);
+  });
+  return { workouts, errors, warnings };
+}
+
+// Casa itens planejados com os existentes: primeiro por id, depois por nome (cada existente so uma vez).
+function matchList(planned, existing) {
+  const claimed = new Set();
+  const matches = planned.map(() => null);
+  planned.forEach((item, index) => {
+    if (!item.id) return;
+    const found = existing.find((candidate) => candidate.id === item.id && !claimed.has(candidate));
+    if (found) { claimed.add(found); matches[index] = found; }
+  });
+  planned.forEach((item, index) => {
+    if (matches[index]) return;
+    const key = item.name.toLowerCase();
+    const found = existing.find((candidate) => !claimed.has(candidate) && candidate.name.toLowerCase() === key);
+    if (found) { claimed.add(found); matches[index] = found; }
+  });
+  return { matches, leftover: existing.filter((candidate) => !claimed.has(candidate)) };
+}
+
+function planBulkChanges(text, format = bulkFormat) {
+  const parsed = format === "json" ? parseWorkoutsJson(text) : parseWorkoutsText(text);
+  const top = matchList(parsed.workouts, activeWorkouts());
+  const stats = { created: 0, updated: 0, removedWorkouts: top.leftover.length, removedExercises: 0 };
+  parsed.workouts.forEach((workout, index) => {
+    const existing = top.matches[index];
+    if (!existing) {
+      stats.created += 1;
+      return;
+    }
+    stats.updated += 1;
+    stats.removedExercises += matchList(workout.exercises, existing.exercises).leftover.length;
+  });
+  return { ...parsed, stats };
+}
+
+function buildNextWorkouts(plan) {
+  const top = matchList(plan.workouts, activeWorkouts());
+  const takenIds = new Set(state.workouts.filter((item) => item.programId !== state.activeProgramId).map((item) => item.id));
+  return plan.workouts.map((workout, index) => {
+    const existing = top.matches[index];
+    const inner = matchList(workout.exercises, existing ? existing.exercises : []);
+    const exercises = workout.exercises.map((exercise, j) => {
+      const previous = inner.matches[j];
+      const out = {
+        ...(previous || { id: exercise.id || uid("exercise") }),
+        name: exercise.name,
+        muscle: exercise.muscle,
+        notes: exercise.notes,
+        sets: exercise.sets
+      };
+      if (exercise.imageUrl) out.imageUrl = exercise.imageUrl;
+      return out;
+    });
+    const out = {
+      ...(existing || { id: workout.id && !takenIds.has(workout.id) ? workout.id : uid("workout"), programId: state.activeProgramId, group: "", notes: "" }),
+      name: workout.name,
+      day: workout.day,
+      groups: workout.groups,
+      exercises
+    };
+    if (workout.group !== undefined) out.group = workout.group;
+    if (workout.notes !== undefined) out.notes = workout.notes;
+    if (workout.imageUrl) out.imageUrl = workout.imageUrl;
+    return out;
+  });
+}
+
+function applyBulkChanges(plan) {
+  const next = buildNextWorkouts(plan);
+  state.workouts = [...state.workouts.filter((workout) => workout.programId !== state.activeProgramId), ...next];
+  if (!state.workouts.some((workout) => workout.id === state.selectedWorkoutId && workout.programId === state.activeProgramId)) state.selectedWorkoutId = next[0]?.id || "";
+}
+
+function bulkTextFor(format, workouts) {
+  return format === "json" ? workoutsToJson(workouts) : workoutsToText(workouts);
+}
+
+function refreshBulkFormatUi() {
+  document.querySelectorAll(".bulk-format-bar [data-format]").forEach((button) => {
+    const active = button.dataset.format === bulkFormat;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+  const help = document.getElementById("bulkHelpText");
+  if (help) help.textContent = bulkFormat === "json" ? BULK_JSON_HELP : BULK_FORMAT_HELP;
+  const intro = document.getElementById("bulkIntro");
+  if (intro) {
+    intro.textContent = bulkFormat === "json"
+      ? 'JSON completo. Mantenha os "id" para preservar as fotos; fotos enviadas do aparelho ficam de fora e sao mantidas.'
+      : 'Todos os treinos em um so lugar. Para trocar de ficha, toque em "Limpar tudo" e cole a nova.';
+    intro.textContent = `Grupo "${activeProgram().name}". ${intro.textContent}`;
+  }
+}
+
+function setBulkFormat(format) {
+  if (format === bulkFormat) return;
+  const textarea = document.getElementById("bulkWorkoutsText");
+  if (!textarea) return;
+  const plan = planBulkChanges(textarea.value);
+  if (plan.errors.length) {
+    updateBulkSummary();
+    return;
+  }
+  const next = buildNextWorkouts(plan);
+  bulkFormat = format;
+  textarea.value = bulkTextFor(format, next);
+  bulkPendingConfirm = false;
+  refreshBulkFormatUi();
+  updateBulkSummary();
+}
+
+function updateBulkSummary() {
+  const textarea = document.getElementById("bulkWorkoutsText");
+  const summary = document.getElementById("bulkSummary");
+  const saveButton = document.getElementById("saveEditorButton");
+  if (!textarea || !summary) return;
+  const plan = planBulkChanges(textarea.value);
+  const { stats } = plan;
+  const lines = [];
+
+  plan.errors.slice(0, 6).forEach((message) => lines.push(`<span class="bulk-error">${escapeHtml(message)}</span>`));
+  if (!plan.errors.length) {
+    const parts = [];
+    if (stats.updated) parts.push(`${stats.updated} mantido${stats.updated > 1 ? "s" : ""}`);
+    if (stats.created) parts.push(`${stats.created} novo${stats.created > 1 ? "s" : ""}`);
+    if (stats.removedWorkouts) parts.push(`${stats.removedWorkouts} removido${stats.removedWorkouts > 1 ? "s" : ""}`);
+    const totalExercises = plan.workouts.reduce((sum, workout) => sum + workout.exercises.length, 0);
+    lines.push(`<span><strong>${plan.workouts.length}</strong> treino${plan.workouts.length === 1 ? "" : "s"} · <strong>${totalExercises}</strong> exercicio${totalExercises === 1 ? "" : "s"}${parts.length ? ` (${parts.join(", ")})` : ""}</span>`);
+    if (stats.removedExercises) lines.push(`<span>${stats.removedExercises} exercicio${stats.removedExercises > 1 ? "s" : ""} removido${stats.removedExercises > 1 ? "s" : ""} de treinos mantidos.</span>`);
+    plan.warnings.slice(0, 4).forEach((message) => lines.push(`<span class="bulk-warning">${escapeHtml(message)}</span>`));
+    if (plan.warnings.length > 4) lines.push(`<span class="bulk-warning">+ ${plan.warnings.length - 4} aviso(s).</span>`);
+    if (bulkPendingConfirm) {
+      const removed = stats.removedWorkouts + stats.removedExercises;
+      lines.push(`<span class="bulk-danger">Isso remove ${removed} item(ns) existente(s). Toque em "Confirmar e salvar" para continuar.</span>`);
+    }
+  }
+  summary.innerHTML = lines.join("");
+  if ((bulkPendingConfirm || plan.errors.length) && summary.scrollIntoView) summary.scrollIntoView({ block: "nearest" });
+  if (saveButton) {
+    saveButton.textContent = bulkPendingConfirm ? "Confirmar e salvar" : "Salvar tudo";
+    saveButton.disabled = plan.errors.length > 0;
+  }
+}
+
+function openBulkWorkoutEditor() {
+  if (state.isTracking) {
+    showConfirm(
+      "Treino em andamento",
+      "Finalize ou abandone o treino atual antes de editar todos os treinos.",
+      "Entendi",
+      () => {}
+    );
+    return;
+  }
+  editorMode = "bulk-workouts";
+  editorContext = {};
+  bulkPendingConfirm = false;
+  bulkFormat = "text";
+  elements.dialogTitle.textContent = "Editar todos os treinos";
+  elements.deleteButton.hidden = true;
+  elements.dialogBody.innerHTML = `
+    <div class="filter-bar bulk-format-bar" role="group" aria-label="Formato de edicao">
+      <button type="button" class="filter-pill is-active" data-action="bulk-format" data-format="text" aria-pressed="true">Texto</button>
+      <button type="button" class="filter-pill" data-action="bulk-format" data-format="json" aria-pressed="false">JSON</button>
+    </div>
+    <p class="muted" id="bulkIntro"></p>
+    <details class="bulk-help">
+      <summary>Ver formato</summary>
+      <pre id="bulkHelpText"></pre>
+    </details>
+    <textarea class="textarea bulk-textarea" id="bulkWorkoutsText" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Treinos e exercicios"></textarea>
+    <div class="bulk-tools">
+      <button class="button" type="button" data-action="bulk-copy">Copiar tudo</button>
+      <button class="button ghost" type="button" data-action="bulk-clear">Limpar tudo</button>
+    </div>
+    <div id="bulkSummary" class="bulk-summary" aria-live="polite"></div>
+  `;
+  const textarea = document.getElementById("bulkWorkoutsText");
+  textarea.value = workoutsToText(activeWorkouts());
+  refreshBulkFormatUi();
+  textarea.addEventListener("input", () => {
+    bulkPendingConfirm = false;
+    updateBulkSummary();
+  });
+  updateBulkSummary();
+  if (!elements.editorDialog.open) elements.editorDialog.showModal();
+}
+
+function handleBulkSave() {
+  const textarea = document.getElementById("bulkWorkoutsText");
+  if (!textarea) return;
+  const plan = planBulkChanges(textarea.value);
+  if (plan.errors.length) {
+    updateBulkSummary();
+    return;
+  }
+  const destructive = plan.stats.removedWorkouts + plan.stats.removedExercises > 0;
+  if (destructive && !bulkPendingConfirm) {
+    bulkPendingConfirm = true;
+    updateBulkSummary();
+    return;
+  }
+  applyBulkChanges(plan);
+  bulkPendingConfirm = false;
+  elements.editorDialog.close();
+  render();
+}
+
+function openProgramEditor(programId) {
+  const program = state.programs.find((item) => item.id === programId);
+  editorMode = program ? "edit-program" : "new-program";
+  editorContext = { programId };
+  elements.dialogTitle.textContent = program ? "Editar grupo" : "Novo grupo";
+  elements.deleteButton.hidden = !program || state.programs.length < 2;
+  elements.dialogBody.innerHTML = `
+    <label class="label">Nome do grupo
+      <input class="input" name="name" required placeholder="Ex.: Treino de Julho" value="${escapeAttr(program?.name || "")}">
+    </label>
+    ${program ? `<p class="muted">Excluir o grupo remove os treinos dele. O historico e a evolucao continuam salvos.</p>` : `
+    <label class="check-row">
+      <input type="checkbox" name="copy" value="1">
+      <span>Copiar os treinos do grupo "${escapeHtml(activeProgram().name)}" para o novo</span>
+    </label>
+    <p class="muted">Os treinos do grupo atual continuam salvos e voce pode voltar a ele quando quiser.</p>`}
+  `;
+  if (!elements.editorDialog.open) elements.editorDialog.showModal();
+}
+
+function copyWorkoutsToProgram(sourceProgramId, targetProgramId) {
+  const copies = state.workouts.filter((workout) => workout.programId === sourceProgramId).map((workout) => ({
+    ...structuredClone(workout),
+    id: uid("workout"),
+    programId: targetProgramId,
+    exercises: workout.exercises.map((exercise) => ({
+      ...structuredClone(exercise),
+      sets: exercise.sets.map((set) => ({ ...set, done: false }))
+    }))
+  }));
+  state.workouts.push(...copies);
+}
+
 function submitEditor(event) {
   event.preventDefault();
+  if (editorMode === "bulk-workouts") {
+    handleBulkSave();
+    return;
+  }
   try {
     const data = new FormData(elements.editorForm);
+
+    if (editorMode === "new-program" || editorMode === "edit-program") {
+      const existing = state.programs.find((item) => item.id === editorContext.programId);
+      const name = clean(data.get("name")) || "Novo grupo";
+      if (existing) {
+        existing.name = name;
+      } else {
+        const program = { id: uid("program"), name };
+        const sourceId = state.activeProgramId;
+        state.programs.push(program);
+        if (data.get("copy")) copyWorkoutsToProgram(sourceId, program.id);
+        state.activeProgramId = program.id;
+        if (!state.isTracking) state.selectedWorkoutId = activeWorkouts()[0]?.id || "";
+      }
+    }
 
     if (editorMode === "new-category" || editorMode === "edit-category") {
       const existing = state.exerciseCategories.find((item) => item.id === editorContext.categoryId);
@@ -1643,7 +2278,7 @@ function submitEditor(event) {
           }
         });
       } else {
-        const workout = { id: uid("workout"), ...payload, exercises: [] };
+        const workout = { id: uid("workout"), programId: state.activeProgramId, ...payload, exercises: [] };
         state.workouts.push(workout);
         state.selectedWorkoutId = workout.id;
       }
@@ -1653,11 +2288,15 @@ function submitEditor(event) {
       const workout = state.workouts.find((item) => item.id === editorContext.workoutId);
       const existing = workout?.exercises.find((item) => item.id === editorContext.exerciseId);
       const setRows = $$("[data-set-editor]");
-      const sets = setRows.map((row, index) => ({
-        reps: Number(data.get(`set-reps-${index}`)) || 0,
-        load: clean(data.get(`set-load-${index}`)) || "0kg",
-        done: existing?.sets[index]?.done || false
-      }));
+      const sets = setRows.map((row, index) => {
+        const note = clean(data.get(`set-note-${index}`));
+        return {
+          reps: Number(data.get(`set-reps-${index}`)) || 0,
+          load: clean(data.get(`set-load-${index}`)) || "0kg",
+          ...(note ? { note } : {}),
+          done: existing?.sets[index]?.done || false
+        };
+      });
       const payload = {
         name: clean(data.get("name")) || "Novo exercicio",
         muscle: clean(data.get("muscle")),
@@ -1679,12 +2318,35 @@ function submitEditor(event) {
 }
 
 function deleteCurrent() {
+  if (editorMode === "edit-program") {
+    const program = state.programs.find((item) => item.id === editorContext.programId);
+    elements.editorDialog.close();
+    if (!program || state.programs.length < 2) return;
+    if (state.isTracking) {
+      showConfirm("Treino em andamento", "Finalize ou abandone o treino atual antes de excluir um grupo.", "Entendi", () => {});
+      return;
+    }
+    const count = state.workouts.filter((workout) => workout.programId === program.id).length;
+    showConfirm(
+      "Excluir grupo?",
+      `"${program.name}" e seus ${count} treino${count === 1 ? "" : "s"} serao removidos. O historico e a evolucao continuam salvos.`,
+      "Excluir",
+      () => {
+        state.workouts = state.workouts.filter((workout) => workout.programId !== program.id);
+        state.programs = state.programs.filter((item) => item.id !== program.id);
+        if (state.activeProgramId === program.id) state.activeProgramId = state.programs[0].id;
+        state.selectedWorkoutId = activeWorkouts()[0]?.id || "";
+        render();
+      }
+    );
+    return;
+  }
   if (editorMode === "edit-category") {
     state.exerciseCategories = state.exerciseCategories.filter((item) => item.id !== editorContext.categoryId);
   }
   if (editorMode === "edit-workout") {
     state.workouts = state.workouts.filter((item) => item.id !== editorContext.workoutId);
-    state.selectedWorkoutId = state.workouts[0]?.id || "";
+    state.selectedWorkoutId = activeWorkouts()[0]?.id || "";
   }
   if (editorMode === "edit-exercise") {
     const workout = state.workouts.find((item) => item.id === editorContext.workoutId);
@@ -1827,6 +2489,51 @@ function handleAction(event) {
       }, 650);
     }
   }
+  if (action === "select-program") {
+    const programId = target.dataset.programId;
+    if (state.programs.some((item) => item.id === programId) && programId !== state.activeProgramId) {
+      state.activeProgramId = programId;
+      if (!state.isTracking) state.selectedWorkoutId = activeWorkouts()[0]?.id || "";
+      render();
+    }
+    return;
+  }
+  if (action === "new-program") {
+    openProgramEditor();
+    return;
+  }
+  if (action === "edit-program") {
+    openProgramEditor(target.dataset.programId);
+    return;
+  }
+  if (action === "edit-all-workouts") {
+    openBulkWorkoutEditor();
+    return;
+  }
+  if (action === "bulk-format") {
+    setBulkFormat(target.dataset.format);
+    return;
+  }
+  if (action === "bulk-copy") {
+    const textarea = document.getElementById("bulkWorkoutsText");
+    if (!textarea) return;
+    textarea.focus();
+    textarea.select();
+    let copied = false;
+    try { copied = document.execCommand("copy"); } catch (err) { copied = false; }
+    if (!copied && navigator.clipboard) navigator.clipboard.writeText(textarea.value).catch(() => {});
+    target.textContent = "Copiado";
+    setTimeout(() => { target.textContent = "Copiar tudo"; }, 1500);
+    return;
+  }
+  if (action === "bulk-clear") {
+    const textarea = document.getElementById("bulkWorkoutsText");
+    if (!textarea) return;
+    textarea.value = "";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    textarea.focus();
+    return;
+  }
   if (action === "complete-all-sets") {
     const workout = state.workouts.find((item) => item.id === workoutId);
     const exercise = workout?.exercises.find((item) => item.id === exerciseId);
@@ -1915,9 +2622,10 @@ function handleAction(event) {
 
 function renumberSetInputs() {
   $$("[data-set-editor]").forEach((row, index) => {
-    const [reps, load] = row.querySelectorAll("input");
+    const [reps, load, note] = row.querySelectorAll("input");
     reps.name = `set-reps-${index}`;
     load.name = `set-load-${index}`;
+    if (note) note.name = `set-note-${index}`;
   });
 }
 
@@ -1974,6 +2682,15 @@ $("#quickAddButton").addEventListener("click", () => {
 });
 $("#clearTodayButton").addEventListener("click", clearToday);
 $("#closeDialogButton").addEventListener("click", () => elements.editorDialog.close());
+elements.editorDialog.addEventListener("close", () => {
+  const saveButton = document.getElementById("saveEditorButton");
+  if (saveButton) {
+    saveButton.textContent = "Salvar";
+    saveButton.disabled = false;
+  }
+  bulkPendingConfirm = false;
+  bulkFormat = "text";
+});
 $("#cancelButton").addEventListener("click", () => elements.editorDialog.close());
 elements.deleteButton.addEventListener("click", deleteCurrent);
 $("#saveEditorButton").addEventListener("click", submitEditor);
